@@ -5,7 +5,7 @@ from pathlib import Path
 from langchain_core.messages import HumanMessage,SystemMessage
 from src.models import Call_LLM
 
-def Generate_Document_Summary(chunks,cache_path="data/document_summary.json",batch_size=5):
+def Generate_Document_Summary(cache_path,chunks,batch_size=5):
     cache_file = Path(cache_path)
     cache_file.parent.mkdir(parents=True, exist_ok=True)
 
@@ -134,19 +134,19 @@ DOCUMENT SUMMARIES:
 
     final_summary = Call_LLM(messages)
 
-    if not isinstance(final_summary, str) or not final_summary.strip():
-        raise ValueError("The LLM returned an empty final document summary.")
+    # if not isinstance(final_summary, str) or not final_summary.strip():
+    #     raise ValueError("The LLM returned an empty final document summary.")
 
-    # Save only after successful completion
-    with cache_file.open("w", encoding="utf-8") as file:
-        json.dump(
-            {"summary": final_summary.strip()},
-            file,
-            ensure_ascii=False,
-            indent=2,
-        )
+    # # Save only after successful completion
+    # with cache_file.open("w", encoding="utf-8") as file:
+    #     json.dump(
+    #         {"summary": final_summary.strip()},
+    #         file,
+    #         ensure_ascii=False,
+    #         indent=2,
+    #     )
 
-    print(f"Saved document summary to {cache_path}")
+    # print(f"Saved document summary to {cache_path}")
 
     return final_summary.strip()
 

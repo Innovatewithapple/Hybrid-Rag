@@ -1,0 +1,29 @@
+[
+  {
+    "n_cases": 20,
+    "mean_answer_correctness": 0.9200000000000002,
+    "mean_answer_relevancy": 0.9350000000000002,
+    "mean_context_precision_label": 0.13,
+    "mean_context_recall_label": 0.7916666666666666,
+    "mean_faithfulness": 0.9000000000000001,
+    "mean_hit_rate@1": 0.55,
+    "mean_hit_rate@10": 0.9,
+    "mean_hit_rate@3": 0.75,
+    "mean_hit_rate@5": 0.85,
+    "mean_latency_ms": 24309.30102504981,
+    "mean_mrr": 0.6588888888888889,
+    "mean_ndcg@1": 0.55,
+    "mean_ndcg@10": 0.6270539911986394,
+    "mean_ndcg@3": 0.5250396143013549,
+    "mean_ndcg@5": 0.5914107993936686,
+    "mean_precision@1": 0.55,
+    "mean_precision@10": 0.13,
+    "mean_precision@3": 0.29999999999999993,
+    "mean_precision@5": 0.23000000000000004,
+    "mean_recall@1": 0.35,
+    "mean_recall@10": 0.7916666666666666,
+    "mean_recall@3": 0.55,
+    "mean_recall@5": 0.6916666666666667,
+    "mean_retrieved_count": 10.0
+  }
+]

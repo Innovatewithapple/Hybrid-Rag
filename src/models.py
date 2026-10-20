@@ -48,11 +48,11 @@ def Call_LLM(messages):
     }
 
     # Debug: inspect the actual prompt being sent
-    print("\n--- LLM REQUEST DEBUG ---")
-    for message in formatted_messages:
-        print(f"\nRole: {message['role']}")
-        print(f"Content:\n{message['content'][:1000]}")
-    print("--- END DEBUG ---\n")
+    # print("\n--- LLM REQUEST DEBUG ---")
+    # for message in formatted_messages:
+    #     print(f"\nRole: {message['role']}")
+    #     print(f"Content:\n{message['content'][:1000]}")
+    # print("--- END DEBUG ---\n")
     start = time.perf_counter()
 
     response = requests.post(
