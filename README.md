@@ -74,7 +74,12 @@ HybridRag/
 │   ├── models.py
 │   ├── embeddings.py
 │   └── document_summary.py
+├── app.py
 ├── main.py
+├── hybridrag_eval_adapter.py
+├── run_hybridrag_evaluation.py
+├── evaluation_dataset.jsonl
+├── evaluation_reports/
 ├── .env
 ├── .env.example
 └── README.md
@@ -132,13 +137,41 @@ Keep credentials and private configuration out of version control. Commit `.env.
 
 ### 4. Run the application
 
+Run commands from the project root, using the project's active virtual environment.
+
+**Run the command-line pipeline**
+
 ```bash
-python main.py
+uv run --active python main.py
 ```
 
-Run the command from the project root with the virtual environment activated.
+**Launch the Streamlit interface**
+
+Make sure Redis is running first (see Redis commands below), then run:
+
+```bash
+uv run --active streamlit run app.py
+```
+
+Streamlit prints a local URL in the terminal, usually `http://localhost:8501`.
 
 ## Redis Management
+
+**Start the existing Redis container**
+
+Use this when `hybridrag-redis` has already been created:
+
+```bash
+docker start hybridrag-redis
+```
+
+**Create the Redis container for the first time**
+
+If the container does not exist yet, run:
+
+```bash
+docker run -d --name hybridrag-redis -p 127.0.0.1:6379:6379 redis:7-alpine
+```
 
 **Check Redis status**
 
@@ -192,6 +225,52 @@ docker rmi redis:7-alpine
 ```
 
 The current Redis container does not have an explicitly configured persistent volume, so removing it can permanently discard its stored cache data.
+
+## RAG Evaluation
+
+The evaluation toolkit runs the RAG pipeline against the question dataset and writes per-question results plus an aggregate summary to `evaluation_reports/`.
+
+### 1. Configure the evaluation LLM endpoint
+
+The evaluator uses a separate Qwen-compatible HTTP call. Set the base URL for your running Qwen server (do not include `/v1/chat/completions`):
+
+```bash
+export RAG_EVAL_PUBLIC_URL="https://YOUR-QWEN-SERVER-URL"
+```
+
+If `PUBLIC_URL` is already exported in your shell and points to the same compatible server, the evaluation client can use it as a fallback. Keep private endpoint URLs and credentials out of committed files.
+
+### 2. Run the evaluation
+
+From the HybridRag project root:
+
+```bash
+uv run --active python run_hybridrag_evaluation.py
+```
+
+The dataset is read from `evaluation_dataset.jsonl`. Reports are written to:
+
+- `evaluation_reports/evaluation.csv` — per-question results and metrics
+- `evaluation_reports/evaluation.json` — detailed JSON results
+- `evaluation_reports/summary.json` — aggregate numeric metrics
+
+### 3. Inspect the results
+
+```bash
+uv run --active python -c "import pandas as pd; d = pd.read_csv('evaluation_reports/evaluation.csv'); print(d.columns.tolist()); print(d.head(3).to_string(index=False))"
+```
+
+Print the aggregate summary:
+
+```bash
+cat evaluation_reports/summary.json
+```
+
+The report includes retrieval metrics such as Precision@K, Recall@K, Hit Rate@K, MRR and nDCG, plus LLM-judge scores such as faithfulness, answer relevancy and answer correctness. Retrieval scores depend on the quality and completeness of `relevant_ids` in the dataset; judge scores are model-generated and should be reviewed rather than treated as ground truth.
+
+**Important:** Keep the Qwen endpoint available and ensure required local services/configuration are set up before running evaluation. The evaluation adapter calls the pipeline directly to avoid using the normal semantic-response cache for evaluation cases.
+
+---
 
 ## Current Development Goals
 
