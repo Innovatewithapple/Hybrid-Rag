@@ -1,0 +1,16 @@
+{
+  "question_count": 10,
+  "macro_averages": {
+    "mrr": 0.9,
+    "r_precision": 0.75,
+    "precision@1": 0.8,
+    "recall@1": 0.5833333333333333,
+    "ndcg@1": 0.8,
+    "precision@3": 0.4999999999999999,
+    "recall@3": 1.0,
+    "ndcg@3": 0.9181580296291102,
+    "precision@5": 0.30000000000000004,
+    "recall@5": 1.0,
+    "ndcg@5": 0.9181580296291102
+  }
+}

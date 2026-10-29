@@ -1,0 +1,7 @@
+question_id,question,precision_at_k,recall_at_k,mrr,ndcg_at_k,retrieved_count,relevant_count,hits_at_k
+gdpr_eval_001,What are the subject matter and objectives of the GDPR?,0.2,1.0,0.5,0.6309297535714575,10,1,1
+gdpr_eval_002,"What types of personal-data processing fall within the GDPR's material scope, and what are some exclusions?",0.0,0.0,0.16666666666666666,0.0,10,2,0
+gdpr_eval_003,What principles must be followed when processing personal data under Article 5?,0.2,0.3333333333333333,1.0,0.46927872602275644,10,3,1
+gdpr_eval_004,What lawful bases can justify processing personal data under Article 6(1) of the GDPR?,0.2,0.5,0.25,0.2640681225725909,10,2,1
+gdpr_eval_005,How quickly must a controller respond to a data subject's request under Article 12(3)?,0.2,1.0,1.0,1.0,10,1,1
+MEAN,,0.16,0.5666666666666667,0.5833333333333334,0.472855320433361,,,

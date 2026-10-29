@@ -14,17 +14,25 @@ def get_device():
         return "mps"
     return "cpu"
 
+
 @lru_cache(maxsize=1)
 def load_models():
     device = get_device()
     print(f"Available Device: {device}")
 
-    encoder_tokenizer = AutoTokenizer.from_pretrained('nomic-ai/nomic-embed-text-v1.5',trust_remote_code=True)
-    encoder_model = SentenceTransformer('nomic-ai/nomic-embed-text-v1.5',trust_remote_code=True,device=device)
+    encoder_model = SentenceTransformer(
+        "nomic-ai/nomic-embed-text-v1.5",
+        device=device,
+        trust_remote_code=True
+    )
 
-    reranker_model = CrossEncoder('BAAI/bge-reranker-large',device=device)
+    reranker_model = CrossEncoder(
+        "BAAI/bge-reranker-large",
+        device=device,
+    )
 
-    return encoder_tokenizer,encoder_model,reranker_model
+    return None, encoder_model, reranker_model
+
 
 
 def Call_LLM(messages):
