@@ -10,18 +10,19 @@ from clean_pdf import Load_PDF, parent_child_chunk
 # ============================================================
 # PATHS
 # ============================================================
+from config.paths import PROJECT_ROOT, PDF_PATH, CHUNKS_JSON_PATH as OUTPUT_PATH
 
-PROJECT_ROOT = Path(__file__).resolve().parent
+# PROJECT_ROOT = Path(__file__).resolve().parent
 
-PDF_PATH = PROJECT_ROOT / (
-    "regulation eu 2016679 of the european parliament and-DOC_1.pdf"
-)
+# PDF_PATH = PROJECT_ROOT / (
+#     "regulation eu 2016679 of the european parliament and-DOC_1.pdf"
+# )
 
-OUTPUT_PATH = (
-    PROJECT_ROOT
-    / "Real_Metrics"
-    / "gdpr_parent_child_chunks_with_ids.json"
-)
+# OUTPUT_PATH = (
+#     PROJECT_ROOT
+#     / "Real_Metrics"
+#     / "gdpr_parent_child_chunks_with_ids.json"
+# )
 
 
 def stable_hash(text: str) -> str:

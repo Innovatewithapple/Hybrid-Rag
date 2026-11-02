@@ -38,6 +38,60 @@ def PDF_Chunking(docs,encoder_model):
     return semantic_chunks
 
 
+ART_TITLED = re.compile(r"\bArticle\s+(\d+)\s+([A-Z][^.]{2,160}?)\s+1\.")
+ART_NUMBER = re.compile(r"\bArticle\s+(\d+)\s+[A-Z]")
+MIN_ARTICLE_HEADINGS = 3   # fewer distinct headings than this = no usable Article structure
+ANNEX_HEAD = re.compile(r"\bANNEX\s+([IVXLC]+)\b")
+
+
+def _assign_labels(result, any_start):
+    num, label = 0, ""
+    in_annex = False                                              # NEW
+    labels = []
+    for item in result:
+        text = item["child_text"]
+
+        annex = ANNEX_HEAD.search(text)                           # NEW
+        if annex and num > 0:                                     # NEW
+            in_annex, label = True, f"Annex {annex.group(1)}"     # NEW
+        if in_annex:                                              # NEW
+            labels.append(label)                                  # NEW
+            continue                                              # NEW
+
+        found = [(m.start(), int(m.group(1)), f"Article {m.group(1)} {m.group(2).strip()}", True)
+                 for m in ART_TITLED.finditer(text)]
+        titled = {n for _, n, _, _ in found}
+        found += [(m.start(), int(m.group(1)), f"Article {m.group(1)}", False)
+                  for m in ART_NUMBER.finditer(text) if int(m.group(1)) not in titled]
+        found.sort()
+
+        def accept(n, is_titled):
+            return num <= n <= num + 3 or (any_start and num == 0 and is_titled)
+
+        i = 0
+        while i < len(found) and found[i][0] <= 2:
+            if accept(found[i][1], found[i][3]):
+                num, label = found[i][1], found[i][2]
+            i += 1
+        labels.append(label)
+        for _, n, lab, is_titled in found[i:]:
+            if accept(n, is_titled):
+                num, label = n, lab
+    return labels
+
+
+def _label_articles(result):
+    """Sets metadata['article'] on every chunk. Documents without Article headings get ''."""
+    labels = None
+    for any_start in (False, True):                     # pass 1 = exactly the current behaviour
+        labels = _assign_labels(result, any_start)
+        if len({l for l in labels if l}) >= MIN_ARTICLE_HEADINGS:
+            break
+    else:                                               # neither pass found a real structure
+        labels = [""] * len(result)
+    for item, lab in zip(result, labels):
+        item["metadata"]["article"] = lab
+
 def parent_child_chunk(docs, parent_size=1000, child_size=300, overlap=1):
     result = []
 
@@ -134,26 +188,7 @@ def parent_child_chunk(docs, parent_size=1000, child_size=300, overlap=1):
                     'parent_text': parent_text,
                     'metadata': child_metadata
                 })
-    # NEW: label every chunk in document order (replaces the art_of lookup)
-    num, label = 0, ""
-    for item in result:
-        text = item["child_text"]
-        found = [(m.start(), int(m.group(1)), f"Article {m.group(1)} {m.group(2).strip()}")
-                 for m in ART_TITLED.finditer(text)]
-        titled = {n for _, n, _ in found}
-        found += [(m.start(), int(m.group(1)), f"Article {m.group(1)}")
-                  for m in ART_NUMBER.finditer(text) if int(m.group(1)) not in titled]
-        found.sort()
-
-        i = 0
-        while i < len(found) and found[i][0] <= 2:
-            if num <= found[i][1] <= num + 3:
-                num, label = found[i][1], found[i][2]
-            i += 1
-        item["metadata"]["article"] = label
-        for _, n, lab in found[i:]:
-            if num <= n <= num + 3:
-                num, label = n, lab
+    _label_articles(result)
     return result
 
 

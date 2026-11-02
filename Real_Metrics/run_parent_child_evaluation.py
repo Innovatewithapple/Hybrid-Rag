@@ -18,16 +18,24 @@ from pathlib import Path
 import sys
 from pathlib import Path
 
+# PROJECT_ROOT = Path(__file__).resolve().parents[1]
+# sys.path.insert(0, str(PROJECT_ROOT))
+# from main import build_retrieval_components, retrieve_ranked_documents
+
+
+# PROJECT_DIR = Path(__file__).resolve().parent.parent
+# DATASET_PATH = Path(__file__).resolve().parent / "gdpr_parent_child_evaluation_hard.jsonl"
+# REPORT_DIR = PROJECT_DIR / "evaluation_reports"
+# REPORT_PATH = REPORT_DIR / "parent_child_retrieval_metrics.csv"
+# K_VALUES = (1, 3, 5)
+
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(PROJECT_ROOT))
+sys.path.insert(0, str(PROJECT_ROOT))              # must stay before the imports below
+from config.paths import EVAL_PATH, REPORT_DIR, REPORT_PATH, SUMMARY_PATH
 from main import build_retrieval_components, retrieve_ranked_documents
 
-
-PROJECT_DIR = Path(__file__).resolve().parent.parent
-DATASET_PATH = Path(__file__).resolve().parent / "gdpr_parent_child_evaluation_hard.jsonl"
-REPORT_DIR = PROJECT_DIR / "evaluation_reports"
-REPORT_PATH = REPORT_DIR / "parent_child_retrieval_metrics.csv"
-K_VALUES = (1, 3, 5)
+DATASET_PATH = EVAL_PATH
+K_VALUES = (1, 2, 3, 4, 5)
 
 def to_parent_id(child_id):
     return child_id.rsplit("_child_", 1)[0]
@@ -171,7 +179,7 @@ def main():
         writer.writeheader()
         writer.writerows(report_rows)
 
-    summary_path = REPORT_DIR / "parent_child_retrieval_summary.json"
+    summary_path = SUMMARY_PATH
     with summary_path.open("w", encoding="utf-8") as file:
         json.dump(
             {"question_count": count, "macro_averages": averages},

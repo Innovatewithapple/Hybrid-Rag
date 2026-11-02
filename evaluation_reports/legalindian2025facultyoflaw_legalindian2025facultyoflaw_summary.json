@@ -1,0 +1,22 @@
+{
+  "question_count": 5,
+  "macro_averages": {
+    "mrr": 1.0,
+    "r_precision": 0.64,
+    "precision@1": 1.0,
+    "recall@1": 0.42000000000000004,
+    "ndcg@1": 1.0,
+    "precision@2": 0.8,
+    "recall@2": 0.6,
+    "ndcg@2": 0.9226294385530917,
+    "precision@3": 0.6,
+    "recall@3": 0.64,
+    "ndcg@3": 0.8469278726022755,
+    "precision@4": 0.45,
+    "recall@4": 0.64,
+    "ndcg@4": 0.7717869904907632,
+    "precision@5": 0.36,
+    "recall@5": 0.64,
+    "ndcg@5": 0.7230066495853423
+  }
+}

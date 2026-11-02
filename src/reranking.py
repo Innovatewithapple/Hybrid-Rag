@@ -51,7 +51,8 @@ class ParentChildReranking:
 
         # 2. Score using the Full Parent Context
         pairs = [
-            (question, f"{doc.metadata.get('article', '')}\n{doc.metadata.get('parent_text', doc.page_content)}")
+            (question, (f"{doc.metadata['article']}\n" if doc.metadata.get("article") else "")
+                    + doc.metadata.get("parent_text", doc.page_content))
             for doc in unique_docs
         ]
         scores = self.rerankingmodel.predict(pairs)

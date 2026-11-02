@@ -5,6 +5,7 @@ query, generate an answer, invoke the semantic cache, or route to a summary.
 That keeps retrieval evaluation deterministic and separate from answer quality.
 """
 
+from multiprocessing import parent_process
 from pathlib import Path
 from typing import Any
 import hashlib
@@ -18,20 +19,24 @@ from clean_pdf import Load_PDF, parent_child_chunk
 from src.embeddings import NomicEmbeddings
 from src.models import load_models
 from src.reranking import ParentChildReranking
+import re
+from nltk.stem import PorterStemmer
+
+_stem = PorterStemmer().stem
+
+def bm25_tokens(text):
+    """Lowercase, drop punctuation, stem. Used for both the documents and the query."""
+    return [_stem(w) for w in re.findall(r"[a-z0-9]+", text.lower())]
 
 
 PROJECT_DIR = Path(__file__).resolve().parent
-PDF_PATH = PROJECT_DIR / (
-    "regulation eu 2016679 of the european parliament and-DOC_1.pdf"
-)
+from config.paths import PDF_PATH        # the PDF now comes from config/paths.py
 
 # Retrieval configuration. Keep these values fixed between evaluation runs.
-BM25_K = 15
+BM25_K = 50
 FAISS_K = 15
 RERANK_TOP_K = 10
 ENSEMBLE_WEIGHTS = [0.5, 0.5]
-
-
 
 def load_parent_child_documents(pdf_path: Path = PDF_PATH) -> list[Document]:
     """Load parent-child chunks and assign stable IDs from their text."""
@@ -82,7 +87,9 @@ def load_parent_child_documents(pdf_path: Path = PDF_PATH) -> list[Document]:
                 metadata=metadata,
             )
         )
-
+    labels = {d.metadata.get("article", "") for d in child_documents} - {""}
+    if len(labels) >= 3:
+        child_documents = [d for d in child_documents if d.metadata.get("article")]
     child_ids = [doc.metadata["child_id"] for doc in child_documents]
 
     if len(child_ids) != len(set(child_ids)):
@@ -98,14 +105,13 @@ def load_parent_child_documents(pdf_path: Path = PDF_PATH) -> list[Document]:
     return child_documents
 
 
-
 def build_retrieval_components():
     """Build hybrid retrieval and parent-child reranking once per run."""
     _encoder_tokenizer, encoder_model, reranker_model = load_models()
     embeddings = NomicEmbeddings(encoder_model=encoder_model)
     chunks = load_parent_child_documents()
 
-    bm25_retriever = BM25Retriever.from_documents(chunks)
+    bm25_retriever = BM25Retriever.from_documents(chunks)   # CHANGED
     bm25_retriever.k = BM25_K
 
     vector_store = FAISS.from_documents(
@@ -138,11 +144,7 @@ def build_retrieval_components():
     }
 
 
-def retrieve_ranked_documents(
-    question: str,
-    hybrid_retriever: Any,
-    parent_child_reranker: ParentChildReranking,
-) -> list[Document]:
+def retrieve_ranked_documents(question: str,hybrid_retriever: Any,parent_child_reranker: ParentChildReranking,) -> list[Document]:
     """Return the ranked, unique-parent Document list used for evaluation."""
     candidates = hybrid_retriever.invoke(question)
     reranked = parent_child_reranker(
@@ -151,12 +153,7 @@ def retrieve_ranked_documents(
     return reranked["context"]
 
 
-def build_rag_chain(
-    hybrid_retriever: Any,
-    parent_child_reranker: ParentChildReranking,
-    prompt: Any,
-    call_llm: Any,
-):
+def build_rag_chain(hybrid_retriever: Any,parent_child_reranker: ParentChildReranking,prompt: Any,call_llm: Any,):
     """Build the answer chain; evaluation can use retrieval without calling this."""
     def format_parent_context(result: dict) -> dict:
         context = "\n\n".join(
@@ -189,7 +186,7 @@ def build_rag_chain(
 #     faiss_chunks = faiss_retriever.invoke(query)
 #     bm25_chunks = bm25_retreiver.invoke(query)
 #     hybrid_chunks = hybrid_retriever.invoke(query)
-#     relevant_ids=["parent_0cd58fe49427d0ea_child_0004", "parent_0b9a31bfcc7d8ff9_child_0002", "parent_0b9a31bfcc7d8ff9_child_0003", "parent_b9f46675b9052e90_child_0002"]
+#     relevant_ids= ["parent_e419b9a6cba922d9_child_0005", "parent_4f9218c10b6ccb27_child_0000", "parent_4f9218c10b6ccb27_child_0001"]
 #     for index,faiss_chunk in enumerate(faiss_chunks):
 #         print(f"\nIndex: {index+1}")
 #         print(f"child_id: {faiss_chunk.metadata['child_id']}")
@@ -231,7 +228,7 @@ def build_rag_chain(
 #             print("=" * 50)
              
 
-# RunTest(query='If a person believes their data protection rights were violated, what legal remedies do they have against the supervisory authority and against the controller or processor')
+# RunTest(query='Which bodies must appoint a data protection officer, and what protections does the officer have against instructions and dismissal')
 if __name__ == "__main__":
     # Intentionally no hard-coded test question or answer generation here.
     # Use Real_Metrics/run_parent_child_evaluation.py for Precision/Recall/MRR/nDCG.
