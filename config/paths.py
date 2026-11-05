@@ -8,8 +8,8 @@ METRICS_DIR  = PROJECT_ROOT / "Real_Metrics"     # chunk JSONs and eval .jsonl f
 REPORT_DIR   = PROJECT_ROOT / "evaluation_reports"
 
 # ===== EDIT ONLY THESE TWO LINES WHEN YOU SWITCH PDF =====
-PDF_NAME  = os.environ.get("RAG_PDF",  "legalindian2025facultyoflaw.pdf")
-EVAL_FILE = os.environ.get("RAG_EVAL", "legalindian2025facultyoflaw.jsonl")
+PDF_NAME  = os.environ.get("RAG_PDF",  "regulation eu 2016679 of the european parliament and-DOC_1.pdf")
+EVAL_FILE = os.environ.get("RAG_EVAL", "gdpr_questions_011_100.jsonl")
 # =========================================================
 
 # Everything below is derived from the two lines above. Don't edit.

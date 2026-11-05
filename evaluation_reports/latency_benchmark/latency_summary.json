@@ -1,0 +1,15 @@
+{
+    "dataset": "gdpr_questions_011_100.jsonl",
+    "unique_questions": 100,
+    "repetitions_per_question": 3,
+    "expected_runs": 300,
+    "successful_runs": 292,
+    "failed_runs": 8,
+    "warmup_latency_seconds": 3.312,
+    "latency_unit": "milliseconds",
+    "p50_latency_ms": 1696.13,
+    "p95_latency_ms": 7801.35,
+    "mean_latency_ms": 2593.07,
+    "min_latency_ms": 869.51,
+    "max_latency_ms": 52697.29
+}

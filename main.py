@@ -21,6 +21,14 @@ from src.models import load_models
 from src.reranking import ParentChildReranking
 import re
 from nltk.stem import PorterStemmer
+from dotenv import load_dotenv
+from functools import lru_cache
+from langsmith import traceable
+
+from src.models import load_models, Call_LLM
+from Prompt.legel_prompt import prompt
+
+load_dotenv()
 
 _stem = PorterStemmer().stem
 
@@ -33,7 +41,7 @@ PROJECT_DIR = Path(__file__).resolve().parent
 from config.paths import PDF_PATH        # the PDF now comes from config/paths.py
 
 # Retrieval configuration. Keep these values fixed between evaluation runs.
-BM25_K = 50
+BM25_K = 10
 FAISS_K = 15
 RERANK_TOP_K = 10
 ENSEMBLE_WEIGHTS = [0.5, 0.5]
@@ -104,7 +112,7 @@ def load_parent_child_documents(pdf_path: Path = PDF_PATH) -> list[Document]:
 
     return child_documents
 
-
+@lru_cache(maxsize=1)
 def build_retrieval_components():
     """Build hybrid retrieval and parent-child reranking once per run."""
     _encoder_tokenizer, encoder_model, reranker_model = load_models()
@@ -172,6 +180,25 @@ def build_rag_chain(hybrid_retriever: Any,parent_child_reranker: ParentChildRera
         | prompt
         | RunnableLambda(lambda prompt_value: call_llm(prompt_value.to_messages()))
     )
+
+@lru_cache(maxsize=1)
+def get_rag_chain():
+    components = build_retrieval_components()
+    return build_rag_chain(
+        hybrid_retriever=components["hybrid_retriever"],
+        parent_child_reranker=components["parent_child_reranker"],
+        prompt=prompt,
+        call_llm=Call_LLM,
+    )
+
+
+# @traceable(name="Legal Hybrid RAG",run_type="chain")
+# def run_rag(question: str):
+#     if not question or not question.strip():
+#         raise ValueError("Question cannot be empty.")
+#     rag_chain = get_rag_chain()
+#     answer = rag_chain.invoke(question)
+#     return answer
 
 # def RunTest(query):
 #     components = build_retrieval_components()

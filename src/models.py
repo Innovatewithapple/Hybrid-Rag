@@ -4,6 +4,7 @@ from transformers import AutoTokenizer,AutoModelForCausalLM
 from functools import lru_cache
 import requests
 import time
+import os
 
 PUBLIC_URL = "https://absentee-mulled-stadium.ngrok-free.dev"
 
@@ -30,6 +31,8 @@ def load_models():
         "BAAI/bge-reranker-large",
         device=device,
     )
+    if str(device).startswith("cuda"):
+        reranker_model.model.half()
 
     return None, encoder_model, reranker_model
 
@@ -52,31 +55,30 @@ def Call_LLM(messages):
         "messages": formatted_messages,
         "temperature": 0.2,
         "max_tokens": 500,
-        "cache_prompt": True,
     }
 
-    # Debug: inspect the actual prompt being sent
-    # print("\n--- LLM REQUEST DEBUG ---")
-    # for message in formatted_messages:
-    #     print(f"\nRole: {message['role']}")
-    #     print(f"Content:\n{message['content'][:1000]}")
-    # print("--- END DEBUG ---\n")
+    provider = os.getenv("LLM_PROVIDER", "ngrok")
+
+    if provider == "gemini":
+        url = "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions"
+        headers = {"Authorization": f"Bearer {os.environ['GEMINI_API_KEY']}"}
+        payload["model"] = os.getenv("GEMINI_MODEL", "gemini-3.5-flash-lite")
+    else:
+        url = f"{PUBLIC_URL}/v1/chat/completions"
+        headers = {}
+        payload["cache_prompt"] = True
+
     start = time.perf_counter()
 
     response = requests.post(
-        f"{PUBLIC_URL}/v1/chat/completions",
+        url,
         json=payload,
+        headers=headers,
         timeout=180,
     )
     print(f"LLM request time: {time.perf_counter() - start:.2f}s")
 
     response.raise_for_status()
-    result = response.json()["choices"][0]["message"]["content"]
-
-    # print("\n--- LLM RESPONSE DEBUG ---")
-    # print(result[:1000])
-    # print("--- END RESPONSE DEBUG ---\n")
-
-    return result
+    return response.json()["choices"][0]["message"]["content"]
 
 
