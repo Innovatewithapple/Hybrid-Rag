@@ -1,285 +1,262 @@
 # HybridRag
 
-A hybrid Retrieval-Augmented Generation (RAG) system for querying legal documents, combining semantic and keyword retrieval, neural reranking, and semantic response caching with Redis.
+A hybrid Retrieval-Augmented Generation (RAG) system for legal-document
+question answering. It combines dense and keyword retrieval,
+cross-encoder reranking, article-aware parent-child chunking,
+document-overview routing, and semantic response caching.
 
-## Overview
+## Evaluation & Performance
 
-HybridRag is designed to answer questions about legal documents such as the GDPR (General Data Protection Regulation). It combines document-level summarization with retrieval-based question answering to handle both broad questions and detailed, provision-specific queries.
+Evaluated across **5 legal PDFs** with different structures, including
+article/chapter-based legislation and unstructured plain text.
 
-The project also explores semantic response caching to reduce redundant LLM inference when users ask questions that are sufficiently similar to previously answered questions.
+### Retrieval quality
+
+Primary benchmark: **100-question GDPR evaluation set**.
+
+| Metric                                        |    Result |
+|:----------------------------------------------|----------:|
+| Mean Reciprocal Rank (MRR)                    | **0.925** |
+| nDCG@5                                        | **0.918** |
+| Correct chunk ranked first                    |   **87%** |
+| Relevant chunks retrieved in top 5 (Recall@5) |   **96%** |
+| MRR improvement over baseline                 |  **+59%** |
+
+Additional evaluations across smaller datasets (5–10 questions per
+document) achieved MRR scores between **0.88 and 1.00**. The weakest
+results were on unstructured plain-text documents, where document
+structure provides fewer reliable article and section boundaries.
+
+### End-to-end latency
+
+Measured across **100 questions × 3 repetitions (300 attempted runs)**,
+using LangSmith tracing and per-stage profiling.
+
+| Metric               | Earlier configuration | Optimized configuration |
+|:---------------------|----------------------:|------------------------:|
+| P50 / median latency |                 4.64s |               **1.70s** |
+| P50 reduction        |                     — |                 **63%** |
+| BGE reranking time   |                ~0.70s |              **~0.20s** |
+| P95 latency          |                     — |               **7.80s** |
+| Mean latency         |                     — |               **2.59s** |
+
+The optimized configuration combined: - **Gemini 3.5 Flash-Lite**
+instead of self-hosted Qwen3-30B for generation. - **FP16 inference**
+for the BGE cross-encoder reranker.
+
+The latest benchmark summary recorded **292 successful runs and 8 failed
+runs** out of 300 attempts. On successful runs, minimum latency was
+**0.87s** and maximum latency was **52.70s**.
+
+*P50 is the median: half of successful requests completed at or below
+this latency. P95 is the threshold at or below which 95% of successful
+requests completed. The 63% P50 reduction compares configurations that
+changed both the generation provider and reranking precision; it should
+not be attributed to either change alone. Results depend on hardware,
+model-serving conditions, network latency, and workload.*
+
+## How It Works
+
+1.  **Document processing:** Load legal PDFs, extract text, create
+    semantic chunks, and generate reusable document summaries.
+2.  **Article-aware parent-child chunking:** Preserve complete legal
+    clauses and article context while retrieving smaller child chunks.
+3.  **Hybrid retrieval:** Combine Nomic dense retrieval through FAISS
+    with BM25 keyword retrieval using a weighted ensemble.
+4.  **Reranking:** Score retrieved parent-level context with
+    `BAAI/bge-reranker-large`.
+5.  **Overview routing:** Route broad questions to document summaries
+    and provision-specific questions to retrieval.
+6.  **Answer generation:** Format the selected context and send it to an
+    OpenAI-compatible chat-completion endpoint.
+7.  **Semantic response cache:** Redis can return a previously generated
+    answer for a sufficiently similar question, subject to the
+    configured similarity threshold and document-version metadata.
 
 ## Architecture
 
-### 1. Document Processing
-- Load legal PDF documents.
-- Split document content into semantic chunks.
-- Generate and reuse cached document summaries.
-- Preserve chunk content for retrieval and answer generation.
-
-### 2. Hybrid Retrieval
-- **Dense retrieval:** Nomic embeddings with FAISS.
-- **Keyword retrieval:** BM25.
-- **Hybrid search:** Combine dense and lexical retrieval results.
-- **Reranking:** Use `BAAI/bge-reranker-large` to improve the relevance of retrieved passages.
-
-### 3. Overview Routing
-- Embed incoming questions using `nomic-ai/nomic-embed-text-v1.5`.
-- Compare questions against predefined overview-question embeddings.
-- Route broad questions to the document summary.
-- Route detailed legal questions to the retrieval pipeline.
-
-### 4. Semantic Response Caching
-Redis stores previously generated answers alongside their original questions and embeddings.
-
-The intended workflow is:
-
-`Question → Semantic Cache → Cache Hit or Miss`
-
-- **Cache hit:** Return a sufficiently similar cached answer without another LLM call.
-- **Cache miss:** Continue through overview routing or hybrid retrieval, generate an answer, and cache the result.
-- **Similarity matching:** Compare normalized embeddings using cosine similarity.
-- **Cache metadata:** Store the source document version to help manage stale answers.
-
-Semantic similarity alone does not guarantee that two legal questions have the same intent. Cache thresholds and answer validity must be evaluated carefully.
-
-### 5. Answer Generation
-- Use retrieved and reranked context for detailed questions.
-- Generate responses using an OpenAI-compatible chat completion endpoint.
-- Use Qwen3 30B A3B for local inference on a GPU-backed server.
+``` text
+                         User question
+                               |
+                    Semantic response cache
+                         /           \
+                     Cache hit      Cache miss
+                        |               |
+                   Cached answer   Overview routing
+                                      /       \
+                              Broad query   Detailed query
+                                  |              |
+                          Document summary   Hybrid retrieval
+                                             /          \
+                                        FAISS dense    BM25 lexical
+                                             \          /
+                                           Weighted ensemble
+                                                  |
+                                      Parent-child reranking
+                                                  |
+                                          Context formatting
+                                                  |
+                                            LLM generation
+                                                  |
+                                               Answer
+```
 
 ## Tech Stack
 
-| Component | Technology |
-|---|---|
-| Language | Python 3.11 |
-| Embeddings | Nomic Embed v1.5 |
-| Dense retrieval | FAISS |
-| Keyword retrieval | BM25 |
-| Hybrid retrieval | LangChain EnsembleRetriever |
-| Reranking | BGE Reranker Large |
-| Response cache | Redis |
-| Containerization | Docker |
-| LLM | Qwen3 30B A3B |
-| Document processing | PyMuPDF / LangChain |
-| Chunking | Semantic chunking |
+| Component           | Technology                                                                    |
+|:--------------------|:------------------------------------------------------------------------------|
+| Language            | Python 3.11                                                                   |
+| Embeddings          | `nomic-ai/nomic-embed-text-v1.5`                                              |
+| Dense retrieval     | FAISS                                                                         |
+| Keyword retrieval   | BM25                                                                          |
+| Hybrid retrieval    | LangChain `EnsembleRetriever`                                                 |
+| Reranking           | `BAAI/bge-reranker-large`                                                     |
+| Chunking            | Semantic chunking; article-aware parent-child structure                       |
+| Response cache      | Redis                                                                         |
+| LLM                 | OpenAI-compatible chat-completion endpoint (Qwen3-30B or configured provider) |
+| Document processing | PyMuPDF / LangChain                                                           |
+| Tracing             | LangSmith                                                                     |
+| Containerization    | Docker (Redis)                                                                |
 
 ## Project Structure
 
-```text
+``` text
 HybridRag/
-├── data/
-│   ├── semantic_chunks.json
-│   └── document_summary.json
-├── src/
-│   ├── models.py
-│   ├── embeddings.py
-│   └── document_summary.py
-├── app.py
-├── main.py
-├── hybridrag_eval_adapter.py
-├── run_hybridrag_evaluation.py
-├── evaluation_dataset.jsonl
-├── evaluation_reports/
-├── .env
-├── .env.example
+├── data/                       # Source documents and processed data
+├── src/                        # Models, embeddings, reranking, utilities
+├── Prompt/
+│   └── legel_prompt.py         # RAG prompt
+├── evaluation_reports/         # Generated evaluation outputs
+├── main.py                     # Main RAG application / pipeline entry point
+├── benchmark_latency.py        # End-to-end latency benchmark
+├── .env.example                # Environment-variable template
 └── README.md
 ```
 
-*The structure above represents the main components; adapt it to match the actual files in your repository.*
+*This is a high-level structure; filenames and data subfolders may vary
+with the checked-out version.*
 
-## Getting Started
+## Setup
 
-### 1. Create and activate a virtual environment
+### 1. Create the environment
 
-```bash
+``` bash
 uv venv --python 3.11
 source .venv/bin/activate
 ```
 
-Install the dependencies defined by your project:
+Install the dependencies used by the project:
 
-```bash
+``` bash
 uv sync
 ```
 
-### 2. Start Redis using Docker
+If your checkout does not include a `pyproject.toml` / lockfile, install
+the project’s dependencies into the active environment rather than
+copying a virtual environment between machines.
 
-```bash
+### 2. Configure environment variables
+
+Create a local `.env` file using `.env.example` as a guide. Configure
+the LLM server URL and any required credentials.
+
+For the latency benchmark, ensure the configured endpoint is reachable
+for the full duration of the run. Keep API keys, private endpoint URLs,
+and other secrets out of version control.
+
+### 3. Start Redis
+
+Redis is used by the semantic response cache.
+
+``` bash
 docker run -d \
   --name hybridrag-redis \
   -p 127.0.0.1:6379:6379 \
   redis:7-alpine
 ```
 
-Verify that the container is running:
+If the container already exists, start it with:
 
-```bash
-docker ps
+``` bash
+docker start hybridrag-redis
 ```
 
-Test the Redis connection:
+Verify the connection:
 
-```bash
+``` bash
 docker exec -it hybridrag-redis redis-cli ping
 ```
 
 Expected output:
 
-```text
+``` text
 PONG
 ```
 
-### 3. Configure environment variables
+## Run the Application
 
-Create a `.env` file for the configuration required by your project, including the LLM server URL.
+Run the main RAG application / pipeline from the project root:
 
-Keep credentials and private configuration out of version control. Commit `.env.example` with placeholder values instead of real secrets.
-
-### 4. Run the application
-
-Run commands from the project root, using the project's active virtual environment.
-
-**Run the command-line pipeline**
-
-```bash
+``` bash
 uv run --active python main.py
 ```
 
-**Launch the Streamlit interface**
+## Run the Latency Benchmark
 
-Make sure Redis is running first (see Redis commands below), then run:
+Run the end-to-end latency benchmark from the project root:
 
-```bash
-uv run --active streamlit run app.py
+``` bash
+uv run --active python benchmark_latency.py
 ```
 
-Streamlit prints a local URL in the terminal, usually `http://localhost:8501`.
+The benchmark performs a warm-up, runs the configured question set
+repeatedly, records per-run latency, and writes its reports to:
+
+``` text
+evaluation_reports/latency_benchmark/
+├── latency_results.csv
+└── latency_summary.json
+```
+
+The CSV contains per-run measurements. The JSON contains aggregate
+statistics such as successful/failed runs, P50, P95, mean, minimum, and
+maximum latency.
+
+**Benchmark notes** - The reported benchmark uses 100 questions with 3
+repetitions each (300 attempted runs). - Keep the LLM endpoint available
+throughout the benchmark. - Hardware, GPU backend, model precision,
+endpoint location, and network conditions affect results. - Compare runs
+only when the question set, repetition count, model configuration, and
+measurement boundaries are consistent. - `benchmark_latency.py` measures
+runtime performance; it does not by itself calculate retrieval-quality
+metrics such as MRR or nDCG.
 
 ## Redis Management
 
-**Start the existing Redis container**
-
-Use this when `hybridrag-redis` has already been created:
-
-```bash
-docker start hybridrag-redis
-```
-
-**Create the Redis container for the first time**
-
-If the container does not exist yet, run:
-
-```bash
-docker run -d --name hybridrag-redis -p 127.0.0.1:6379:6379 redis:7-alpine
-```
-
-**Check Redis status**
-
-```bash
+``` bash
+# Check running containers
 docker ps
-```
 
-**Inspect Redis keys**
-
-```bash
+# Open Redis CLI
 docker exec -it hybridrag-redis redis-cli
-```
 
-Then, inside the Redis CLI:
-
-```redis
-SCAN 0 MATCH semantic_cache:* COUNT 100
-```
-
-**Clear semantic response cache**
-
-```bash
-docker exec hybridrag-redis redis-cli --scan --pattern 'semantic_cache:*' | while read key; do
-  docker exec hybridrag-redis redis-cli DEL "$key"
-done
-```
-
-**Stop Redis**
-
-```bash
+# Stop Redis
 docker stop hybridrag-redis
-```
 
-**Start the existing container again**
-
-```bash
-docker start hybridrag-redis
-```
-
-**Remove the container**
-
-```bash
-docker stop hybridrag-redis
+# Remove the container (stored cache data is lost without a persistent volume)
 docker rm hybridrag-redis
 ```
 
-**Remove the Docker image**
+## Limitations
 
-```bash
-docker rmi redis:7-alpine
-```
-
-The current Redis container does not have an explicitly configured persistent volume, so removing it can permanently discard its stored cache data.
-
-## RAG Evaluation
-
-The evaluation toolkit runs the RAG pipeline against the question dataset and writes per-question results plus an aggregate summary to `evaluation_reports/`.
-
-### 1. Configure the evaluation LLM endpoint
-
-The evaluator uses a separate Qwen-compatible HTTP call. Set the base URL for your running Qwen server (do not include `/v1/chat/completions`):
-
-```bash
-export RAG_EVAL_PUBLIC_URL="https://YOUR-QWEN-SERVER-URL"
-```
-
-If `PUBLIC_URL` is already exported in your shell and points to the same compatible server, the evaluation client can use it as a fallback. Keep private endpoint URLs and credentials out of committed files.
-
-### 2. Run the evaluation
-
-From the HybridRag project root:
-
-```bash
-uv run --active python run_hybridrag_evaluation.py
-```
-
-The dataset is read from `evaluation_dataset.jsonl`. Reports are written to:
-
-- `evaluation_reports/evaluation.csv` — per-question results and metrics
-- `evaluation_reports/evaluation.json` — detailed JSON results
-- `evaluation_reports/summary.json` — aggregate numeric metrics
-
-### 3. Inspect the results
-
-```bash
-uv run --active python -c "import pandas as pd; d = pd.read_csv('evaluation_reports/evaluation.csv'); print(d.columns.tolist()); print(d.head(3).to_string(index=False))"
-```
-
-Print the aggregate summary:
-
-```bash
-cat evaluation_reports/summary.json
-```
-
-The report includes retrieval metrics such as Precision@K, Recall@K, Hit Rate@K, MRR and nDCG, plus LLM-judge scores such as faithfulness, answer relevancy and answer correctness. Retrieval scores depend on the quality and completeness of `relevant_ids` in the dataset; judge scores are model-generated and should be reviewed rather than treated as ground truth.
-
-**Important:** Keep the Qwen endpoint available and ensure required local services/configuration are set up before running evaluation. The evaluation adapter calls the pipeline directly to avoid using the normal semantic-response cache for evaluation cases.
-
----
-
-## Current Development Goals
-
-- Improve semantic routing between document overview and detailed retrieval.
-- Evaluate semantic cache thresholds against paraphrased and unrelated legal questions.
-- Prevent stale cached answers when the source document changes.
-- Measure cache hit rate, retrieval quality, and LLM latency.
-- Explore persistent vector indexing and more scalable cache lookup strategies.
-
-## Important Note
-
-This is an experimental legal-document QA system, not a substitute for professional legal advice. Answers should be checked against the original legal provisions and authoritative sources.
+- Retrieval quality depends on document extraction quality, chunk
+  boundaries, and the completeness of relevance labels in the evaluation
+  dataset.
+- Plain-text legal documents without explicit article or section
+  structure can be harder to retrieve precisely.
+- Semantic cache similarity does not guarantee identical legal intent.
+  Cache thresholds and cached-answer validity should be evaluated
+  carefully, especially when source documents change.
+- This project is an experimental legal-document QA system, not a
+  substitute for professional legal advice. Verify answers against the
+  original legal provisions and authoritative sources.
